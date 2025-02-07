@@ -99,7 +99,7 @@ local options = {
     comment = "%%",
     stop = "<!%-%-%s*stop%s*%-%->",
   },
-  executors = {},
+  executors = defaults.executors,
 }
 
 --- Setup the plugin
@@ -346,10 +346,10 @@ M.start_presentation = function(opts)
     vim.api.nvim_win_close(state.floats.body.win, true)
   end)
 
-  present_keymap("n", "X", function()
+  present_keymap("n", "x", function()
     local slide = state.parsed.slides[state.current_slide]
     -- TODO: Make a way for people to execute this for other languages
-    local block = slide.blocks[1]
+    local block = slide.blocks[#slide.blocks]
     if not block then
       print("No blocks on this page")
       return
@@ -373,6 +373,57 @@ M.start_presentation = function(opts)
     vim.list_extend(output, executor(block))
     table.insert(output, "```")
 
+    local buf = vim.api.nvim_create_buf(false, true) -- No file, scratch buffer
+    local temp_width = math.floor(vim.o.columns * 0.8)
+    local temp_height = math.floor(vim.o.lines * 0.8)
+    vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      style = "minimal",
+      noautocmd = true,
+      width = temp_width,
+      height = temp_height,
+      row = math.floor((vim.o.lines - temp_height) / 2),
+      col = math.floor((vim.o.columns - temp_width) / 2),
+      border = "rounded",
+    })
+
+    vim.bo[buf].filetype = "markdown"
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, output)
+  end)
+
+  present_keymap("n", "X", function()
+    local slide = state.parsed.slides[state.current_slide]
+    -- TODO: Make a way for people to execute this for other languages
+    local output = { "# Code", "" }
+    for index, block in ipairs(slide.blocks) do
+      if not block then
+        print("No blocks on this page")
+        return
+      end
+
+      local executor = options.executors[block.language]
+      if not executor then
+        print("No valid executor for this language")
+        return
+      end
+
+      -- Table to capture print messages
+      if index > 1 then
+        table.insert(output, "")
+        table.insert(output, "----")
+        table.insert(output, "")
+      end
+      table.insert(output, "```" .. block.language)
+      vim.list_extend(output, vim.split(block.body, "\n"))
+      table.insert(output, "```")
+
+      table.insert(output, "")
+      table.insert(output, "# Output")
+      table.insert(output, "")
+      table.insert(output, "```")
+      vim.list_extend(output, executor(block))
+      table.insert(output, "```")
+    end
     local buf = vim.api.nvim_create_buf(false, true) -- No file, scratch buffer
     local temp_width = math.floor(vim.o.columns * 0.8)
     local temp_height = math.floor(vim.o.lines * 0.8)
